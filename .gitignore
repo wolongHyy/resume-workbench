@@ -1,0 +1,14 @@
+node_modules/
+.next/
+.next-*/
+resume-data/
+*.tsbuildinfo
+*.db
+*.db-journal
+.env*
+!.env.example
+ai.txt
+素材库.md
+实习简历/
+简历生成工具/
+*.pdf

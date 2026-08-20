@@ -1,0 +1,8 @@
+"use client";
+import { FormEvent, useState } from "react";
+
+export default function Login() {
+  const [registerMode, setRegisterMode] = useState(false); const [email, setEmail] = useState(""); const [password, setPassword] = useState(""); const [error, setError] = useState(""); const [busy, setBusy] = useState(false);
+  async function submit(event: FormEvent) { event.preventDefault(); setBusy(true); setError(""); try { const response = await fetch("/api/auth", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: registerMode ? "register" : "login", email, password }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || "操作失败"); location.reload(); } catch (e) { setError(e instanceof Error ? e.message : "操作失败"); } finally { setBusy(false); } }
+  return <main className="auth-page"><form className="auth-box" onSubmit={submit}><div className="brand"><b>R</b><strong>简历工作台</strong></div><h1>{registerMode ? "创建本地账号" : "登录简历工作台"}</h1><p>数据保存在 D:\简历，每个账号独立保存。</p><label><span>邮箱</span><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label><label><span>密码（至少 6 位）</span><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} required /></label>{error && <div className="error-box">{error}</div>}<button className="primary wide" disabled={busy}>{busy ? "处理中..." : registerMode ? "注册并登录" : "登录"}</button><button type="button" className="link-button" onClick={() => setRegisterMode((v) => !v)}>{registerMode ? "已有账号，返回登录" : "首次使用，注册账号"}</button></form></main>;
+}
