@@ -9,6 +9,8 @@ const lines = (input: unknown) => Array.isArray(input) ? input.map(value).filter
 const record = (input: unknown): RecordItem => { const x = input && typeof input === "object" ? input as Record<string, unknown> : {}; return { organization: value(x.organization ?? x.company), role: value(x.role), date: value(x.date), bullets: lines(x.bullets) }; };
 const project = (input: unknown): Project => { const x = input && typeof input === "object" ? input as Record<string, unknown> : {}; return { name: value(x.name), role: value(x.role), date: value(x.date), bullets: lines(x.bullets) }; };
 const education = (input: unknown): Education => { const x = input && typeof input === "object" ? input as Record<string, unknown> : {}; return { school: value(x.school), degree: value(x.degree), major: value(x.major), date: value(x.date), detail: value(x.detail) }; };
+const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+const numeric = (input: unknown, fallback: number, min: number, max: number) => typeof input === "number" && Number.isFinite(input) ? clamp(input, min, max) : fallback;
 
 export function normalizeResume(input: unknown): Resume {
   if (!input || typeof input !== "object") throw new Error("简历数据格式无效");
@@ -19,8 +21,10 @@ export function normalizeResume(input: unknown): Resume {
   const order = Array.isArray(x.sectionOrder) ? x.sectionOrder.filter((id): id is SectionId => typeof id === "string" && validSections.has(id as SectionId)) : [];
   return {
     id, name: value(x.name) || "未命名简历", targetRole: value(x.targetRole), updatedAt: value(x.updatedAt) || new Date().toISOString(), theme: x.theme === "product" || x.theme === "technical" ? x.theme : "standard",
-    fontSize: x.fontSize === "small" || x.fontSize === "large" ? x.fontSize : "medium", spacing: x.spacing === "compact" || x.spacing === "relaxed" ? x.spacing : "normal",
-    moduleGap: x.moduleGap === "compact" || x.moduleGap === "relaxed" ? x.moduleGap : "normal",
+    fontSize: typeof x.fontSize === "string" ? (x.fontSize === "small" ? 9 : x.fontSize === "large" ? 11 : 10) : numeric(x.fontSize, 10, 8, 14),
+    lineHeight: numeric(x.lineHeight, 1.55, 1.2, 2),
+    spacing: x.spacing === "compact" ? 2 : x.spacing === "relaxed" ? 9 : numeric(x.spacing, 5, 0, 20),
+    moduleGap: x.moduleGap === "compact" ? 8 : x.moduleGap === "relaxed" ? 28 : numeric(x.moduleGap, 16, 4, 48),
     listStyle: x.listStyle === "dash" || x.listStyle === "number" ? x.listStyle : "dot",
     sectionOrder: [...order, ...defaultSectionOrder.filter((id) => !order.includes(id))],
     profile: { name: value(profile.name), phone: value(profile.phone), email: value(profile.email), city: value(profile.city), headline: value(profile.headline) },

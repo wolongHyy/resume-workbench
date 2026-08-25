@@ -20,16 +20,29 @@
 .paper .marker-number{list-style:none;padding-left:0;counter-reset:item}
 .paper .marker-number li{counter-increment:item}
 .paper .marker-number li::before{content:counter(item) ". "}
-/* ===== 新增：排版 - 段落间距与模块间距分开控制 ===== */
-.spacing-compact .paper-section p{margin:1px 0}
-.spacing-compact .paper-section ul{margin:2px 0}
-.spacing-normal .paper-section p{margin:2px 0}
-.spacing-normal .paper-section ul{margin:4px 0}
-.spacing-relaxed .paper-section p{margin:5px 0}
-.spacing-relaxed .paper-section ul{margin:8px 0}
-.gap-compact .paper-section{margin-top:8px}
-.gap-normal .paper-section{margin-top:16px}
-.gap-relaxed .paper-section{margin-top:26px}
+/* ===== 新增：排版 - 数值化滑块（字号/行高/段落间距/模块间距） ===== */
+.slider-field{display:block;margin:16px 0}
+.slider-field .slider-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+.slider-field .slider-head span{color:#52606d;font-weight:600}
+.slider-field .slider-head em{font-style:normal;color:var(--accent);font-weight:700;font-size:13px}
+.slider-field input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer}
+.range-labels{display:flex;justify-content:space-between;margin-top:2px}
+.range-labels em{font-style:normal;color:var(--muted);font-size:11px}
+.paper{font-size:var(--paper-fs,10pt);line-height:var(--paper-lh,1.55)}
+.paper-section{margin-top:var(--module-gap,16px)}
+.paper-section p{margin:var(--para-gap,2px) 0}
+.paper-section ul{margin:calc(var(--para-gap,4px) + 2px) 0}
+.item{margin:calc(var(--para-gap,5px) + 3px) 0}
+/* ===== 新增：左侧模块拖拽排序 ===== */
+.sidebar-modules{margin-top:18px;border-top:1px solid var(--line);padding:13px 6px 4px}
+.sidebar-modules .side-title{padding:0 0 8px}
+.sidebar-modules .side-title em{font-style:normal;color:var(--muted);font-size:11px}
+.module-list{display:flex;flex-direction:column;gap:3px}
+.module-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:5px;font-size:12px;color:#273444;background:#f7f9fb;cursor:grab;user-select:none}
+.module-row .grip{color:#aab2bc;font-size:12px;line-height:1}
+.module-row .name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.module-row.dragging{opacity:.4}
+.module-row.over{border-top:2px solid var(--accent);background:#eaf3ff}
 /* ===== 新增：证件照 ===== */
 .paper-head{display:flex;gap:18px;align-items:flex-start;justify-content:space-between}
 .paper-id{flex:1;min-width:0}

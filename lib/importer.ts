@@ -55,13 +55,19 @@ const SCHOOL_RE = /大学|学院|学校|研究院|党校|中学|高中|职校|�
 const LABEL_RE = /^(?:gpa|绩点|排名|荣誉|证书|资格|技能|特长|主修|辅修|专业|课程|奖学金|获奖|社团|活动|成绩|平均分|加权)[：:]/i;
 // 列表记号（-、•、1. 等）
 const MARKER_RE = /^\s*(?:[-*•●◦▪◆]\s*|\d{1,2}\s*[.、)](?=\s|\D)\s*)/;
+// 一句话结束的标点：没有以这些结尾的行，说明可能被 PDF/Word 换行截断，需要和下一行拼接
+const SENTENCE_END = /[。！？!?…；;）)"』」]$/;
+// 常见“自定义模块”标题后缀：如“其他经历”“志愿服务”“开源项目”等
+const CUSTOM_SUFFIX = /(?:经历|经验|活动|实践|作品|证书|资格|荣誉|奖项|获奖|特长|爱好|兴趣|语言|培训|志愿|社团|论文|专利|竞赛|任职|项目)$/;
+// 基本信息字段名：出现“字段：”时是个人信息，不是模块标题
+const PROFILE_LABEL_RE = /^(?:姓名|名字|电话|手机|邮箱|电子邮箱|求职意向|求职岗位|目标岗位|意向岗位|城市|现居|所在城市|所在地|出生|年龄|性别|籍贯|政治面貌|婚姻)/;
 // 匹配常见时间格式：2018-2022、2018.09-2022.06、2018年9月-2022年6月、2020.06至今、2019.07 ~ 2021.03
 const DATE_RE = /((?:19|20)\d{2}\s*[-—~～至到]\s*(?:19|20)\d{2}|(?:19|20)\d{2}\s*[年./-]\s*\d{1,2}\s*月?(?:\s*[-—~～至到]\s*(?:(?:19|20)?\d{2}\s*(?:[年./-]\s*\d{1,2}\s*月?)?|至今|现在|今))?|(?:19|20)\d{2}\s*年(?:\s*[-—~～至到]\s*(?:19|20)\d{2}\s*年)?)/;
 
 // 去掉行首的列表记号，如 "-"、"•"、"1."、"1、"；但不会误删 "2020.06" 这类时间
 const stripMarker = (value: string) => value.replace(MARKER_RE, "");
 
-function detectHeader(line: string): { key: SectionKey; inline: string; title?: string } | null {
+function detectHeader(line: string, topLevel = false, fromMarker = false): { key: SectionKey; inline: string; title?: string } | null {
   const trimmed = line.trim();
   for (const group of [...SECTION_HEADERS, ...EXTRA_SECTIONS]) {
     for (const name of group.names) {
@@ -78,7 +84,27 @@ function detectHeader(line: string): { key: SectionKey; inline: string; title?: 
   }
   // 兼容 "二、教育经历"、"1. 工作经历" 这类带编号的标题（只处理较短的行，避免误伤正文）
   const numbered = trimmed.replace(/^(?:[0-9一二三四五六七八九十]+[、.．]\s*|[-*•]\s*)/, "");
-  if (numbered !== trimmed && numbered.length < 20) return detectHeader(numbered);
+  const hadMarker = /^[-*•●◦▪◆]\s*/.test(trimmed);
+  if (numbered !== trimmed && numbered.length < 20) return detectHeader(numbered, topLevel, hadMarker);
+  // 通用自定义模块标题：短行、以常见模块后缀结尾（如“其他经历”“志愿服务”“开源项目”）
+  if (!fromMarker && !/^[-*•●◦▪◆]/.test(trimmed)) {
+    const withoutNumber = trimmed.replace(/^(?:[0-9一二三四五六七八九十]+[、.．]\s*)/, "");
+    // “标题：”或“标题：内容”的短行：标题带模块后缀时任何位置都认；否则只在模块外认，避免“项目成果：”这类小节误判
+    const colonTitle = withoutNumber.match(/^([\u4e00-\u9fa5A-Za-z0-9（）()·\s]{2,12})[：:](.*)$/);
+    if (colonTitle) {
+      const title = colonTitle[1].trim();
+      if (CUSTOM_SUFFIX.test(title) || (topLevel && !PROFILE_LABEL_RE.test(title))) {
+        return { key: "custom", inline: colonTitle[2].trim(), title };
+      }
+    }
+    if (
+      withoutNumber.length >= 2 && withoutNumber.length <= 14 &&
+      CUSTOM_SUFFIX.test(withoutNumber) &&
+      /^[\u4e00-\u9fa5A-Za-z0-9（）()·\s]+$/.test(withoutNumber)
+    ) {
+      return { key: "custom", inline: "", title: withoutNumber };
+    }
+  }
   return null;
 }
 
@@ -151,7 +177,13 @@ function educationItems(lines: string[] | undefined): Education[] {
     if (isEducationEntity(item)) {
       items.push(item);
     } else if (items.length) {
-      items[items.length - 1].detail = [items[items.length - 1].detail, marked].filter(Boolean).join("\n");
+      const target = items[items.length - 1];
+      // PDF/Word 换行可能把同一句话截成两行：上一句还没结束就拼回去，避免“一行字变成几行字”
+      if (target.detail && !SENTENCE_END.test(target.detail.trim())) {
+        target.detail = target.detail + marked;
+      } else {
+        target.detail = [target.detail, marked].filter(Boolean).join("\n");
+      }
     }
   }
   return items.filter((item) => item.school || item.date || item.detail);
@@ -191,7 +223,16 @@ function structuredItems(lines: string[] | undefined, parse: (line: string) => R
     if (item.organization || item.date) {
       items.push(item);
     } else if (items.length && item.bullets.length) {
-      items[items.length - 1].bullets.push(...item.bullets);
+      const target = items[items.length - 1];
+      for (const bullet of item.bullets) {
+        const last = target.bullets[target.bullets.length - 1];
+        // 上一句还没结束就拼回去（PDF/Word 换行截断），否则作为新要点
+        if (last && !SENTENCE_END.test(last.trim())) {
+          target.bullets[target.bullets.length - 1] = last + bullet;
+        } else {
+          target.bullets.push(bullet);
+        }
+      }
     } else if (item.bullets.length) {
       items.push(item);
     }
@@ -236,7 +277,7 @@ export function parsePlainText(text: string, base: Resume): ImportResult | null 
   for (const rawLine of source.split(/\r?\n/)) {
     const line = cleanText(rawLine);
     if (!line) continue;
-    const header = detectHeader(line);
+    const header = detectHeader(line, current === null && currentCustom < 0);
     if (header) {
       if (header.key === "custom") {
         const title = header.title || "自定义内容";

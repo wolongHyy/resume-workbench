@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { cleanText, cloneResume, emptyResume, ListStyle, Resume, SectionId, sectionLabels } from "../lib/types";
 
 type Props = { initial: Resume; resumes: Resume[]; user: string };
-type Tab = "profile" | "education" | "experience" | "internships" | "projects" | "campus" | "awards" | "skills" | "custom" | "settings" | "order" | "import";
+type Tab = "profile" | "education" | "experience" | "internships" | "projects" | "campus" | "awards" | "skills" | "custom" | "settings" | "import";
 const tabs: [Tab, string][] = [
   ["profile", "基本信息"],
   ["education", "教育经历"],
@@ -15,7 +15,6 @@ const tabs: [Tab, string][] = [
   ["skills", "专业技能"],
   ["custom", "自定义模块"],
   ["settings", "排版设置"],
-  ["order", "模块顺序"],
   ["import", "智能导入"],
 ];
 const themes = [
@@ -45,6 +44,8 @@ export default function Workbench({ initial, resumes, user }: Props) {
   const [beforeImport, setBeforeImport] = useState<Resume | null>(null);
   const [raw, setRaw] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [overIndex, setOverIndex] = useState<number | null>(null);
   const resumeRef = useRef(resume);
 
   useEffect(() => { resumeRef.current = resume; }, [resume]);
@@ -121,11 +122,11 @@ export default function Workbench({ initial, resumes, user }: Props) {
       setNotice(friendlyError(error, "导出"));
     }
   };
-  const move = (index: number, direction: -1 | 1) => update((draft) => {
+  const moveTo = (from: number, to: number) => update((draft) => {
     const order = [...draft.sectionOrder];
-    const target = index + direction;
-    if (target < 0 || target >= order.length) return;
-    [order[index], order[target]] = [order[target], order[index]];
+    if (from < 0 || from >= order.length || to < 0 || to >= order.length || from === to) return;
+    const [item] = order.splice(from, 1);
+    order.splice(to, 0, item);
     draft.sectionOrder = order;
   });
 
@@ -152,6 +153,26 @@ export default function Workbench({ initial, resumes, user }: Props) {
               </button>
             ))}
           </div>
+          <div className="sidebar-modules">
+            <div className="side-title"><strong>模块顺序</strong><em>拖动调整</em></div>
+            <div className="module-list">
+              {resume.sectionOrder.map((id, index) => (
+                <div
+                  key={id}
+                  className={"module-row" + (dragIndex === index ? " dragging" : "") + (overIndex === index && dragIndex !== null && dragIndex !== index ? " over" : "")}
+                  draggable
+                  onDragStart={(e) => { setDragIndex(index); e.dataTransfer.effectAllowed = "move"; }}
+                  onDragOver={(e) => { e.preventDefault(); if (overIndex !== index) setOverIndex(index); }}
+                  onDragLeave={() => { if (overIndex === index) setOverIndex(null); }}
+                  onDrop={(e) => { e.preventDefault(); if (dragIndex !== null) moveTo(dragIndex, index); setDragIndex(null); setOverIndex(null); }}
+                  onDragEnd={() => { setDragIndex(null); setOverIndex(null); }}
+                >
+                  <span className="grip">⠿</span>
+                  <span className="name">{sectionLabels[id]}</span>
+                </div>
+              ))}
+            </div>
+          </div>
           <div className="versions">
             <span>版本</span>
             <button onClick={() => { setResume(cloneResume(resume)); setNotice("已恢复当前草稿"); }}>当前草稿</button>
@@ -176,7 +197,7 @@ export default function Workbench({ initial, resumes, user }: Props) {
           </nav>
           {notice && <div className="notice">{notice}<button onClick={() => setNotice("")}>×</button></div>}
           <div className="form-panel">
-            <Editor tab={tab} resume={resume} update={update} raw={raw} setRaw={setRaw} file={file} setFile={setFile} runImport={runImport} move={move} setNotice={setNotice} />
+            <Editor tab={tab} resume={resume} update={update} raw={raw} setRaw={setRaw} file={file} setFile={setFile} runImport={runImport} setNotice={setNotice} />
           </div>
         </section>
         <aside className="preview">
@@ -188,9 +209,9 @@ export default function Workbench({ initial, resumes, user }: Props) {
   );
 }
 
-function Editor({ tab, resume, update, raw, setRaw, file, setFile, runImport, move, setNotice }: {
+function Editor({ tab, resume, update, raw, setRaw, file, setFile, runImport, setNotice }: {
   tab: Tab; resume: Resume; update: (fn: (d: Resume) => void) => void; raw: string; setRaw: (v: string) => void;
-  file: File | null; setFile: (f: File | null) => void; runImport: () => void; move: (i: number, d: -1 | 1) => void; setNotice: (v: string) => void;
+  file: File | null; setFile: (f: File | null) => void; runImport: () => void; setNotice: (v: string) => void;
 }) {
   if (tab === "profile") return (
     <section>
@@ -208,21 +229,11 @@ function Editor({ tab, resume, update, raw, setRaw, file, setFile, runImport, mo
   if (tab === "settings") return (
     <section>
       <h1>排版设置</h1>
-      <label><span>字体大小</span>
-        <select value={resume.fontSize} onChange={(e) => update((d) => { d.fontSize = e.target.value as Resume["fontSize"]; })}>
-          <option value="small">小</option><option value="medium">中</option><option value="large">大</option>
-        </select>
-      </label>
-      <label><span>段落间距</span>
-        <select value={resume.spacing} onChange={(e) => update((d) => { d.spacing = e.target.value as Resume["spacing"]; })}>
-          <option value="compact">紧凑</option><option value="normal">标准</option><option value="relaxed">宽松</option>
-        </select>
-      </label>
-      <label><span>模块间距</span>
-        <select value={resume.moduleGap} onChange={(e) => update((d) => { d.moduleGap = e.target.value as Resume["moduleGap"]; })}>
-          <option value="compact">紧凑</option><option value="normal">标准</option><option value="relaxed">宽松</option>
-        </select>
-      </label>
+      <p className="hint">拖动滑块，右侧预览会立即变化；左小右大。</p>
+      <Slider label="字体大小" value={resume.fontSize} display={`${resume.fontSize.toFixed(1)}pt`} min={8} max={14} step={0.5} onChange={(v) => update((d) => { d.fontSize = v; })} />
+      <Slider label="行间距" value={resume.lineHeight} display={resume.lineHeight.toFixed(2)} min={1.2} max={2} step={0.05} onChange={(v) => update((d) => { d.lineHeight = v; })} />
+      <Slider label="段落间距" value={resume.spacing} display={`${Math.round(resume.spacing)}px`} min={0} max={20} step={1} onChange={(v) => update((d) => { d.spacing = v; })} />
+      <Slider label="模块间距" value={resume.moduleGap} display={`${Math.round(resume.moduleGap)}px`} min={4} max={48} step={1} onChange={(v) => update((d) => { d.moduleGap = v; })} />
       <label><span>内容排序记号</span>
         <select value={resume.listStyle} onChange={(e) => update((d) => { d.listStyle = e.target.value as ListStyle; })}>
           <option value="dot">圆点 ●</option>
@@ -231,21 +242,6 @@ function Editor({ tab, resume, update, raw, setRaw, file, setFile, runImport, mo
         </select>
       </label>
       <p className="hint">段落间距控制模块内段落与要点列表的松紧；模块间距控制各模块标题之间的留白。教育、工作、项目等条目按“名称居左、角色/专业居中加粗、时间居右”排版。</p>
-    </section>
-  );
-  if (tab === "order") return (
-    <section>
-      <h1>模块顺序</h1>
-      <p>使用上移、下移调整右侧预览和导出顺序。</p>
-      {resume.sectionOrder.map((id, index) => (
-        <div className="order-row" key={id}>
-          <strong>{sectionLabels[id]}</strong>
-          <span>
-            <button className="secondary" disabled={index === 0} onClick={() => move(index, -1)}>上移</button>
-            <button className="secondary" disabled={index === resume.sectionOrder.length - 1} onClick={() => move(index, 1)}>下移</button>
-          </span>
-        </div>
-      ))}
     </section>
   );
   if (tab === "import") return (
@@ -271,6 +267,18 @@ function Editor({ tab, resume, update, raw, setRaw, file, setFile, runImport, mo
   if (tab === "custom") return <Custom resume={resume} update={update} />;
   const key = tab as "experience" | "internships" | "projects" | "campus";
   return <Records title={sectionLabels[key]} kind={key} records={resume[key]} update={update} />;
+}
+
+function Slider({ label, value, display, min, max, step, onChange }: {
+  label: string; value: number; display: string; min: number; max: number; step: number; onChange: (v: number) => void;
+}) {
+  return (
+    <label className="slider-field">
+      <span className="slider-head"><span>{label}</span><em>{display}</em></span>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} />
+      <span className="range-labels"><em>小</em><em>大</em></span>
+    </label>
+  );
 }
 
 function PhotoPicker({ resume, update, setNotice }: { resume: Resume; update: (fn: (d: Resume) => void) => void; setNotice: (v: string) => void }) {
@@ -400,10 +408,15 @@ function Custom({ resume, update }: { resume: Resume; update: (fn: (d: Resume) =
 }
 
 function Preview({ resume }: { resume: Resume }) {
-  const baseClass = `paper paper-${resume.fontSize} spacing-${resume.spacing} gap-${resume.moduleGap}`;
   const marker = `marker-${resume.listStyle}`;
+  const paperStyle = {
+    fontSize: `${resume.fontSize}pt`,
+    lineHeight: resume.lineHeight,
+    "--module-gap": `${resume.moduleGap}px`,
+    "--para-gap": `${resume.spacing}px`,
+  } as React.CSSProperties;
   return (
-    <article className={baseClass}>
+    <article className="paper" style={paperStyle}>
       <div className="paper-head">
         <div className="paper-id">
           <h1>{text(resume.profile.name)}</h1>

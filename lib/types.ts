@@ -1,8 +1,9 @@
 export type Theme = "standard" | "product" | "technical";
 export type AiTask = "parse" | "optimize" | "match" | "check";
-export type FontSize = "small" | "medium" | "large";
-export type Spacing = "compact" | "normal" | "relaxed";
-export type ModuleGap = "compact" | "normal" | "relaxed";
+export type FontSize = number;   // 正文字号，单位 pt
+export type LineHeight = number; // 行高倍数，如 1.55
+export type Spacing = number;    // 段落/要点间距，单位 px
+export type ModuleGap = number;  // 模块间距，单位 px
 export type ListStyle = "dot" | "dash" | "number";
 export type SectionId = "summary" | "education" | "experience" | "internships" | "projects" | "campus" | "awards" | "skills" | "custom-1" | "custom-2" | "custom-3" | "custom-4";
 export type CustomId = "custom-1" | "custom-2" | "custom-3" | "custom-4";
@@ -14,7 +15,7 @@ export type CustomSection = { id: CustomId; title: string; lines: string[] };
 
 export type Resume = {
   id: string; name: string; targetRole: string; updatedAt: string; theme: Theme;
-  fontSize: FontSize; spacing: Spacing; moduleGap: ModuleGap; listStyle: ListStyle; sectionOrder: SectionId[];
+  fontSize: FontSize; lineHeight: LineHeight; spacing: Spacing; moduleGap: ModuleGap; listStyle: ListStyle; sectionOrder: SectionId[];
   profile: { name: string; phone: string; email: string; city: string; headline: string };
   photo: string;
   summary: string; education: Education[]; experience: RecordItem[]; internships: RecordItem[];
@@ -39,7 +40,7 @@ export function cleanText(value: unknown): string {
 export function emptyResume(): Resume {
   return {
     id: crypto.randomUUID(), name: "未命名简历", targetRole: "", updatedAt: new Date().toISOString(), theme: "standard",
-    fontSize: "medium", spacing: "normal", moduleGap: "normal", listStyle: "dot", sectionOrder: [...defaultSectionOrder],
+    fontSize: 10, lineHeight: 1.55, spacing: 5, moduleGap: 16, listStyle: "dot", sectionOrder: [...defaultSectionOrder],
     profile: { name: "", phone: "", email: "", city: "", headline: "" }, photo: "", summary: "", education: [], experience: [], internships: [], projects: [], campus: [], awards: [], skills: [],
     customSections: customIds.map((id) => ({ id, title: "", lines: [] })), jd: "",
   };
