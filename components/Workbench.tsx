@@ -46,6 +46,7 @@ export default function Workbench({ initial, resumes, user }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
+  const dragMoved = useRef(false);
   const resumeRef = useRef(resume);
 
   useEffect(() => { resumeRef.current = resume; }, [resume]);
@@ -129,6 +130,12 @@ export default function Workbench({ initial, resumes, user }: Props) {
     order.splice(to, 0, item);
     draft.sectionOrder = order;
   });
+  // 模块 ↔ 编辑页签：点击模块名直接进入对应编辑页
+  const tabForSection = (id: SectionId): Tab => {
+    if (id === "summary") return "profile";
+    if (id === "custom-1" || id === "custom-2" || id === "custom-3" || id === "custom-4") return "custom";
+    return id;
+  };
 
   return (
     <main className="workbench">
@@ -153,19 +160,27 @@ export default function Workbench({ initial, resumes, user }: Props) {
               </button>
             ))}
           </div>
+          <div className="versions">
+            <span>版本</span>
+            <button onClick={() => { setResume(cloneResume(resume)); setNotice("已恢复当前草稿"); }}>当前草稿</button>
+            <button disabled={!beforeImport} onClick={() => beforeImport && (setResume(cloneResume(beforeImport)), setNotice("已恢复导入前版本"))}>导入前版本</button>
+          </div>
+          <p>数据保存在 D:\简历<br />不会上传到云端</p>
           <div className="sidebar-modules">
-            <div className="side-title"><strong>模块顺序</strong><em>拖动调整</em></div>
+            <div className="side-title"><strong>模块</strong><em>点击编辑 / 拖动排序</em></div>
             <div className="module-list">
               {resume.sectionOrder.map((id, index) => (
                 <div
                   key={id}
-                  className={"module-row" + (dragIndex === index ? " dragging" : "") + (overIndex === index && dragIndex !== null && dragIndex !== index ? " over" : "")}
+                  title="点击进入编辑，拖动调整顺序"
+                  className={"module-row" + (tab === tabForSection(id) ? " active" : "") + (dragIndex === index ? " dragging" : "") + (overIndex === index && dragIndex !== null && dragIndex !== index ? " over" : "")}
                   draggable
-                  onDragStart={(e) => { setDragIndex(index); e.dataTransfer.effectAllowed = "move"; }}
+                  onClick={() => { if (dragMoved.current) return; setTab(tabForSection(id)); }}
+                  onDragStart={(e) => { dragMoved.current = true; setDragIndex(index); e.dataTransfer.effectAllowed = "move"; }}
                   onDragOver={(e) => { e.preventDefault(); if (overIndex !== index) setOverIndex(index); }}
                   onDragLeave={() => { if (overIndex === index) setOverIndex(null); }}
                   onDrop={(e) => { e.preventDefault(); if (dragIndex !== null) moveTo(dragIndex, index); setDragIndex(null); setOverIndex(null); }}
-                  onDragEnd={() => { setDragIndex(null); setOverIndex(null); }}
+                  onDragEnd={() => { setDragIndex(null); setOverIndex(null); setTimeout(() => { dragMoved.current = false; }, 0); }}
                 >
                   <span className="grip">⠿</span>
                   <span className="name">{sectionLabels[id]}</span>
@@ -173,12 +188,6 @@ export default function Workbench({ initial, resumes, user }: Props) {
               ))}
             </div>
           </div>
-          <div className="versions">
-            <span>版本</span>
-            <button onClick={() => { setResume(cloneResume(resume)); setNotice("已恢复当前草稿"); }}>当前草稿</button>
-            <button disabled={!beforeImport} onClick={() => beforeImport && (setResume(cloneResume(beforeImport)), setNotice("已恢复导入前版本"))}>导入前版本</button>
-          </div>
-          <p>数据保存在 D:\简历<br />不会上传到云端</p>
         </aside>
         <section className="editor">
           <div className="editor-head">

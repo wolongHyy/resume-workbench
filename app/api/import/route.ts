@@ -1,40 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import JSZip from "jszip";
-import pdfParse from "pdf-parse";
 import { currentUser } from "../../../lib/auth";
-import { parsePlainText } from "../../../lib/importer";
+import { parseDocxXml, parsePdf } from "../../../lib/file-parser";
+import { parsePlainText, StyledLine } from "../../../lib/importer";
 import { normalizeResume } from "../../../lib/store";
 
 const MAX_BYTES = 20 * 1024 * 1024;
-
-// 大型或加密 PDF 解析可能很慢甚至卡死：超过 45 秒就放弃，避免请求一直挂着（表现为页面“Failed to fetch”）
-function parsePdf(buffer: Buffer): Promise<{ text: string }> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("PDF 解析超时（45秒），可能文件过大或已加密，请改用 Word/TXT 格式重试")), 45000);
-    pdfParse(buffer).then((parsed) => { clearTimeout(timer); resolve(parsed); }).catch((error) => { clearTimeout(timer); reject(error); });
-  });
-}
-
-// .docx 本质是 zip，正文在 word/document.xml；把段落/换行/制表符还原成文本
-function docxText(xml: string): string {
-  return xml
-    .replace(/<w:p[^>]*>/g, "\n")
-    .replace(/<w:br[^>]*\/>/g, "\n")
-    .replace(/<w:tab[^>]*\/>/g, "\t")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&#x([0-9a-fA-F]+);/g, (_match, hex: string) => String.fromCodePoint(parseInt(hex, 16)))
-    .replace(/&#(\d+);/g, (_match, dec: string) => String.fromCodePoint(parseInt(dec, 10)))
-    .replace(/\u00a0/g, " ")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
 
 // 老式 txt 常是 GBK 编码：先按 UTF-8 解，出现乱码再按 GBK 解
 function decodeTextFile(buffer: Buffer): string {
@@ -84,17 +56,21 @@ export async function POST(request: NextRequest) {
 
     const base = normalizeResume(Object.keys(resumeInput as Record<string, unknown>).length ? resumeInput : { id: "import-base" });
     let source = text;
+    let styledLines: StyledLine[] | undefined;
 
     if (buffer && buffer.length) {
       const ext = (fileName.split(".").pop() || "").toLowerCase();
       if (ext === "pdf") {
         const parsed = await parsePdf(buffer);
         source = parsed.text || "";
+        styledLines = parsed.lines;
       } else if (ext === "docx") {
         const zip = await JSZip.loadAsync(buffer);
         const entry = zip.file("word/document.xml");
         if (!entry) throw new Error("无法解析该 Word 文件（缺少文档正文）");
-        source = docxText(await entry.async("string"));
+        const parsed = parseDocxXml(await entry.async("string"));
+        source = parsed.text;
+        styledLines = parsed.lines;
       } else {
         source = decodeTextFile(buffer);
       }
@@ -102,7 +78,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!source.trim()) throw new Error("请粘贴简历文本或选择简历文件");
-    const parsed = parsePlainText(source, base);
+    const parsed = parsePlainText(source, base, styledLines);
     if (!parsed) return NextResponse.json({ error: "未识别到简历内容，请检查文件或文本是否为中文简历" }, { status: 422 });
     return NextResponse.json(parsed);
   } catch (error) {

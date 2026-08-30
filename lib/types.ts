@@ -7,6 +7,8 @@ export type ModuleGap = number;  // 模块间距，单位 px
 export type ListStyle = "dot" | "dash" | "number";
 export type SectionId = "summary" | "education" | "experience" | "internships" | "projects" | "campus" | "awards" | "skills" | "custom-1" | "custom-2" | "custom-3" | "custom-4";
 export type CustomId = "custom-1" | "custom-2" | "custom-3" | "custom-4";
+// 带样式的一行文本：text 为内容，bold 是否加粗，size 为字号（pt，0 表示文件中未记录）
+export type StyledLine = { text: string; bold: boolean; size: number };
 
 export type Education = { school: string; degree: string; major: string; date: string; detail: string };
 export type RecordItem = { organization: string; role: string; date: string; bullets: string[] };

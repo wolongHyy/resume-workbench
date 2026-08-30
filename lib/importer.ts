@@ -1,4 +1,6 @@
-import { cleanText, cloneResume, CustomSection, Education, RecordItem, Resume } from "./types";
+import { cleanText, cloneResume, CustomSection, Education, RecordItem, Resume, StyledLine } from "./types";
+
+export type { StyledLine };
 
 /*
   识别原则（核心标识字段 vs 基本内容）：
@@ -26,7 +28,7 @@ type SectionGroup = { key: SectionKey; names: string[] };
 // 常见简历模块标题（按出现频率排序）
 const SECTION_HEADERS: SectionGroup[] = [
   { key: "profile", names: ["基本信息", "个人信息", "个人资料"] },
-  { key: "summary", names: ["个人概况", "自我评价", "个人总结", "个人简介"] },
+  { key: "summary", names: ["个人概况", "自我评价", "个人评价", "个人总结", "个人简介", "自我介绍"] },
   { key: "education", names: ["教育经历", "教育背景", "学习经历", "教育"] },
   { key: "experience", names: ["工作经历", "工作经验", "职业经历", "工作"] },
   { key: "internships", names: ["实习经历", "实习经验"] },
@@ -66,6 +68,81 @@ const DATE_RE = /((?:19|20)\d{2}\s*[-—~～至到]\s*(?:19|20)\d{2}|(?:19|20)\d
 
 // 去掉行首的列表记号，如 "-"、"•"、"1."、"1、"；但不会误删 "2020.06" 这类时间
 const stripMarker = (value: string) => value.replace(MARKER_RE, "");
+
+// 白名单之外、但一看就是模块标题的常见写法（靠“加粗 + 字号更大”确认是核心标识后使用）
+const STYLED_HEADER_KEYWORDS: [SectionKey, RegExp][] = [
+  ["profile", /^(?:基本信息|个人资料|个人信息|基本资料|联系方式|求职意向|求职岗位|意向岗位|目标岗位)/],
+  ["summary", /^(?:个人|自我)?(?:评价|概况|概述|简介|介绍|总结|简述|评述)/],
+  ["education", /^(?:教育|学习)(?:经历|背景)?$/],
+  ["experience", /^(?:工作|职业|从业|任职)(?:经历|经验)?$/],
+  ["internships", /^实习(?:经历|经验)?$/],
+  ["projects", /^(?:项目|研发|开发)(?:经历|经验)?$/],
+  ["campus", /^(?:校园|在校|校内|学生)(?:经历|活动)?$/],
+  ["awards", /^(?:获奖|荣誉|奖项|奖励)(?:情况|经历)?$/],
+  ["skills", /^(?:专业)?(?:技能|特长|能力|专长)$/],
+];
+
+function matchKnownHeader(title: string): { key: SectionKey } | null {
+  for (const [key, regex] of STYLED_HEADER_KEYWORDS) {
+    if (regex.test(title)) return { key };
+  }
+  for (const group of EXTRA_SECTIONS) {
+    for (const name of group.names) {
+      if (title === name || title.startsWith(name)) return { key: group.key };
+    }
+  }
+  return null;
+}
+
+// 计算“正文基准字号”：取出现次数最多的字号；没有字号信息时返回 0
+function bodySizeOf(lines: StyledLine[]): number {
+  const sizes = lines.map((line) => line.size).filter((size) => size > 0);
+  if (!sizes.length) return 0;
+  const counts = new Map<number, number>();
+  for (const size of sizes) counts.set(size, (counts.get(size) || 0) + 1);
+  let best = sizes[0];
+  let bestCount = 0;
+  for (const [size, count] of counts) {
+    if (count > bestCount) { best = size; bestCount = count; }
+  }
+  return best;
+}
+
+/*
+  核心标识识别：简历里的模块标题（核心标识）通常“加粗 + 字号大于正文”。
+  白名单命中的标题任何时候都算；白名单没命中时，只有满足这个样式特征才认作模块标题，
+  避免把正文里的加粗单位名、字段名误判成新模块。
+*/
+function detectStyledHeader(line: StyledLine, bodySize: number): { key: SectionKey; inline: string; title?: string } | null {
+  const trimmed = cleanText(line.text);
+  if (!trimmed || trimmed.length > 16) return null;
+  if (MARKER_RE.test(trimmed)) return null;
+  const colon = trimmed.match(/^([^：:]{1,14})[：:](.*)$/);
+  const title = cleanText(colon ? colon[1] : trimmed);
+  const inline = cleanText(colon ? colon[2] : "");
+  if (!title || title.length > 14) return null;
+  // “姓名：张三”“电话：138…”这类字段行不是模块标题
+  if (colon && PROFILE_LABEL_RE.test(title)) return null;
+  const sizeBoost = line.size > 0 && bodySize > 0 ? line.size - bodySize : 0;
+  const known = matchKnownHeader(title);
+  if (known) {
+    // 已知模块关键词：加粗或字号更大，任一项满足即可（有些模板只有加粗、有些只有大字号）
+    if (line.bold || sizeBoost >= 1) {
+      return {
+        key: known.key,
+        // 基本信息标题带内容时保留整行，方便继续解析“姓名：张三”这类字段
+        inline: known.key === "profile" && inline ? trimmed : inline,
+        title: known.key === "custom" ? title : undefined,
+      };
+    }
+    return null;
+  }
+  // 未知模块标题：必须同时“加粗 + 字号大于正文”才认定为自定义模块标题
+  if (line.bold && sizeBoost >= 1 && /^[\u4e00-\u9fa5A-Za-z0-9（）()·\s]{2,14}$/.test(title) && /[\u4e00-\u9fa5]/.test(title)) {
+    return { key: "custom", inline, title };
+  }
+  return null;
+}
 
 function detectHeader(line: string, topLevel = false, fromMarker = false): { key: SectionKey; inline: string; title?: string } | null {
   const trimmed = line.trim();
@@ -265,7 +342,7 @@ function skillLines(lines: string[] | undefined): string[] {
 
 export type ImportResult = { resume: Resume; detected: string[] };
 
-export function parsePlainText(text: string, base: Resume): ImportResult | null {
+export function parsePlainText(text: string, base: Resume, styledLines?: StyledLine[]): ImportResult | null {
   const source = cleanText(text);
   if (!source) return null;
 
@@ -274,10 +351,14 @@ export function parsePlainText(text: string, base: Resume): ImportResult | null 
   const pendingCustoms: { title: string; lines: string[] }[] = [];
   let current: SectionKey | null = null;
   let currentCustom = -1;
-  for (const rawLine of source.split(/\r?\n/)) {
-    const line = cleanText(rawLine);
+  const lines: StyledLine[] = styledLines && styledLines.length
+    ? styledLines.filter((styled) => cleanText(styled.text))
+    : source.split(/\r?\n/).map((raw) => ({ text: cleanText(raw), bold: false, size: 0 }));
+  const bodySize = bodySizeOf(lines);
+  for (const styled of lines) {
+    const line = styled.text;
     if (!line) continue;
-    const header = detectHeader(line, current === null && currentCustom < 0);
+    const header: { key: SectionKey; inline: string; title?: string } | null = detectHeader(line, current === null && currentCustom < 0) || detectStyledHeader(styled, bodySize);
     if (header) {
       if (header.key === "custom") {
         const title = header.title || "自定义内容";
