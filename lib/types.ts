@@ -1,5 +1,5 @@
 export type Theme = "standard" | "product" | "technical";
-export type AiTask = "parse" | "optimize" | "match" | "check";
+export type AiTask = "parse" | "optimize" | "match" | "check" | "coach";
 export type FontSize = number;   // 正文字号，单位 pt
 export type LineHeight = number; // 行高倍数，如 1.55
 export type Spacing = number;    // 段落/要点间距，单位 px

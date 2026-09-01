@@ -57,3 +57,19 @@
 .photo-actions p{margin:2px 0 0;color:var(--muted);font-size:12px}
 .form-panel .photo-actions .pick-btn{display:inline-block;margin:0;padding:8px 12px;border:1px solid #d9e0e7;border-radius:5px;background:#fff;color:#52606d;font-weight:600;cursor:pointer}
 .photo-actions .pick-btn input[type=file]{display:none}
+/* ===== 新增：JD 五步优化结果 ===== */
+.coach-result{margin-top:18px;display:flex;flex-direction:column;gap:14px}
+.coach-block{border:1px solid var(--line);border-radius:6px;padding:13px 14px;background:#fafbfc}
+.coach-block h2{margin:0 0 8px;font-size:14px;color:#273444}
+.coach-meta{font-size:13px;font-weight:700;color:var(--accent);margin:0 0 7px}
+.coach-line{margin:4px 0;font-size:13px;color:#465362}
+.coach-line b,.coach-suggestion b,.coach-risk b{color:#273444}
+.coach-risk{display:flex;gap:9px;padding:9px 0;border-bottom:1px solid #e6ebf0}
+.coach-risk:last-child{border-bottom:0}
+.coach-risk .sev{flex-shrink:0;width:30px;height:20px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
+.sev-high{background:#fff1f0;color:#b42318}.sev-medium{background:#fff7e6;color:#ad6800}.sev-low{background:#eef7ff;color:#1976d2}.sev-info{background:#eef1f5;color:#687483}
+.coach-risk div{min-width:0}.coach-risk p,.coach-suggestion p{margin:2px 0;font-size:13px}
+.coach-risk em,.coach-suggestion em{font-style:normal;color:var(--muted);font-size:12px}
+.coach-suggestion{padding:9px 0;border-bottom:1px solid #e6ebf0}
+.coach-suggestion:last-child{border-bottom:0}
+.coach-warning{color:#ad6800;font-size:12px;margin:4px 0}

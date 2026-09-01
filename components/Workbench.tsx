@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { cleanText, cloneResume, emptyResume, ListStyle, Resume, SectionId, sectionLabels } from "../lib/types";
 
 type Props = { initial: Resume; resumes: Resume[]; user: string };
-type Tab = "profile" | "education" | "experience" | "internships" | "projects" | "campus" | "awards" | "skills" | "custom" | "settings" | "import";
+type Tab = "profile" | "education" | "experience" | "internships" | "projects" | "campus" | "awards" | "skills" | "custom" | "settings" | "import" | "coach";
 const tabs: [Tab, string][] = [
   ["profile", "基本信息"],
   ["education", "教育经历"],
@@ -16,6 +16,7 @@ const tabs: [Tab, string][] = [
   ["custom", "自定义模块"],
   ["settings", "排版设置"],
   ["import", "智能导入"],
+  ["coach", "JD 优化"],
 ];
 const themes = [
   { id: "standard" as const, label: "简约", color: "#1976d2" },
@@ -46,6 +47,9 @@ export default function Workbench({ initial, resumes, user }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
+  const [coachBusy, setCoachBusy] = useState(false);
+  const [coachResult, setCoachResult] = useState<any>(null);
+  const [coachError, setCoachError] = useState("");
   const dragMoved = useRef(false);
   const resumeRef = useRef(resume);
 
@@ -121,6 +125,31 @@ export default function Workbench({ initial, resumes, user }: Props) {
       URL.revokeObjectURL(url);
     } catch (error) {
       setNotice(friendlyError(error, "导出"));
+    }
+  };
+  const runCoach = async () => {
+    const jd = resume.jd.trim();
+    if (!jd) {
+      setCoachError("请先在左侧“JD 优化”页签填写职位描述（JD）。");
+      return;
+    }
+    setCoachBusy(true);
+    setCoachError("");
+    setCoachResult(null);
+    try {
+      const response = await fetch("/api/skills", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ task: "coach", resume, input: jd }),
+      });
+      const data = await response.json().catch(() => ({ error: `服务返回异常（HTTP ${response.status}）` }));
+      if (!response.ok) throw new Error(data.error || "JD 优化失败");
+      if (data.error) throw new Error(data.error);
+      setCoachResult(data);
+    } catch (error) {
+      setCoachError(friendlyError(error, "JD 优化"));
+    } finally {
+      setCoachBusy(false);
     }
   };
   const moveTo = (from: number, to: number) => update((draft) => {
@@ -206,7 +235,7 @@ export default function Workbench({ initial, resumes, user }: Props) {
           </nav>
           {notice && <div className="notice">{notice}<button onClick={() => setNotice("")}>×</button></div>}
           <div className="form-panel">
-            <Editor tab={tab} resume={resume} update={update} raw={raw} setRaw={setRaw} file={file} setFile={setFile} runImport={runImport} setNotice={setNotice} />
+            <Editor tab={tab} resume={resume} update={update} raw={raw} setRaw={setRaw} file={file} setFile={setFile} runImport={runImport} setNotice={setNotice} coachBusy={coachBusy} coachResult={coachResult} coachError={coachError} setCoachError={setCoachError} runCoach={runCoach} />
           </div>
         </section>
         <aside className="preview">
@@ -218,9 +247,10 @@ export default function Workbench({ initial, resumes, user }: Props) {
   );
 }
 
-function Editor({ tab, resume, update, raw, setRaw, file, setFile, runImport, setNotice }: {
+function Editor({ tab, resume, update, raw, setRaw, file, setFile, runImport, setNotice, coachBusy, coachResult, coachError, setCoachError, runCoach }: {
   tab: Tab; resume: Resume; update: (fn: (d: Resume) => void) => void; raw: string; setRaw: (v: string) => void;
   file: File | null; setFile: (f: File | null) => void; runImport: () => void; setNotice: (v: string) => void;
+  coachBusy: boolean; coachResult: any; coachError: string; setCoachError: (v: string) => void; runCoach: () => void;
 }) {
   if (tab === "profile") return (
     <section>
@@ -271,11 +301,88 @@ function Editor({ tab, resume, update, raw, setRaw, file, setFile, runImport, se
       </div>
     </section>
   );
+  if (tab === "coach") return (
+    <Coach resume={resume} update={update} busy={coachBusy} result={coachResult} error={coachError} setError={setCoachError} run={runCoach} />
+  );
   if (tab === "education") return <Education resume={resume} update={update} />;
   if (tab === "awards" || tab === "skills") return <Lines title={tab === "awards" ? "奖项荣誉" : "专业技能"} values={tab === "awards" ? resume.awards : resume.skills} update={(values) => update((d) => { if (tab === "awards") d.awards = values; else d.skills = values; })} />;
   if (tab === "custom") return <Custom resume={resume} update={update} />;
   const key = tab as "experience" | "internships" | "projects" | "campus";
   return <Records title={sectionLabels[key]} kind={key} records={resume[key]} update={update} />;
+}
+
+function Coach({ resume, update, busy, result, error, setError, run }: {
+  resume: Resume; update: (fn: (d: Resume) => void) => void; busy: boolean; result: any; error: string; setError: (v: string) => void; run: () => void;
+}) {
+  const list = (value: unknown): string[] => Array.isArray(value) ? value.map((item) => String(item)).filter(Boolean) : [];
+  const risks = result && Array.isArray(result.risks) ? result.risks : [];
+  const suggestions = result && Array.isArray(result.suggestions) ? result.suggestions : [];
+  const matching = result && result.matching ? result.matching : null;
+  const jd = result && result.jd ? result.jd : null;
+  const missing = list(result && result.missing);
+  const severityLabel: Record<string, string> = { high: "高", medium: "中", low: "低", info: "提示" };
+  return (
+    <section>
+      <h1>JD 优化</h1>
+      <label><span>职位描述（JD）</span>
+        <textarea className="large" value={resume.jd} onChange={(e) => update((d) => { d.jd = e.target.value; })} placeholder="粘贴目标岗位的完整职位描述，例如：&#10;岗位职责：需求调研、PRD 撰写、用户访谈…&#10;任职要求：熟悉大模型 API 调用，有项目落地经验…" />
+      </label>
+      <button className="primary" disabled={busy || !resume.jd.trim()} onClick={run}>{busy ? "分析中..." : "开始五步分析"}</button>
+      {error && <div className="error-box">{error}<button className="link-button" onClick={() => setError("")}>关闭</button></div>}
+      {result && (
+        <div className="coach-result">
+          {matching && (
+            <div className="coach-block">
+              <h2>关键词匹配</h2>
+              <p className="coach-meta">匹配度 {Number(matching.score) || 0} / 100</p>
+              <p className="coach-line"><b>已命中</b>：{list(matching.matched).length ? list(matching.matched).join("、") : "暂无"}</p>
+              <p className="coach-line"><b>未命中</b>：{list(matching.missing).length ? list(matching.missing).join("、") : "暂无"}</p>
+              {jd && <p className="coach-line"><b>JD 关键词</b>：{list(jd.keywords).length ? list(jd.keywords).join("、") : "未识别"}</p>}
+            </div>
+          )}
+          {risks.length > 0 && (
+            <div className="coach-block">
+              <h2>事实风险</h2>
+              {risks.map((risk: any, index: number) => (
+                <div className="coach-risk" key={index}>
+                  <span className={`sev sev-${risk.severity || "info"}`}>{severityLabel[risk.severity] || "提示"}</span>
+                  <div>
+                    <b>{text(risk.path)}</b>
+                    <p>{text(risk.item) || text(risk.reason)}</p>
+                    <em>{text(risk.reason)}</em>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {suggestions.length > 0 && (
+            <div className="coach-block">
+              <h2>改进建议</h2>
+              {suggestions.map((suggestion: any, index: number) => (
+                <div className="coach-suggestion" key={index}>
+                  <b>{text(suggestion.path)}</b>
+                  <p>{text(suggestion.after) || "待补充"}</p>
+                  <em>{text(suggestion.reason)}</em>
+                </div>
+              ))}
+            </div>
+          )}
+          {missing.length > 0 && (
+            <div className="coach-block">
+              <h2>待补充</h2>
+              <p className="coach-line">{missing.join("、")}</p>
+            </div>
+          )}
+          {result.warnings && list(result.warnings).length > 0 && (
+            <div className="coach-block">
+              <h2>提醒</h2>
+              {list(result.warnings).map((warning, index) => <p className="coach-warning" key={index}>{warning}</p>)}
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
 }
 
 function Slider({ label, value, display, min, max, step, onChange }: {
