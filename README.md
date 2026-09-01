@@ -1,3 +1,14 @@
+## 一键启动（按平台选一条）
+
+- **Windows** — 双击 `start.bat`，浏览器会打开 <http://localhost:4000>。
+- **macOS**   — 双击 `start.command`（脚本会自动 `chmod +x`，并在 Terminal 窗口里看日志）。
+- **Linux**   — 在终端执行 `./start.sh` 或 `bash start.sh`（需要 Node.js 18+）。
+
+首次运行任一脚本时，如果检测到 `node_modules` 不存在，会自动执行 `npm install`。
+
+> 端口冲突？把 `start.sh` 里最后一行改成 `PORT=4100 npm run dev`，`start.bat` 同理。
+
+
 # 免费简历在线制作工具
 
 一个本地优先、免费使用的中文简历工作台：左侧编辑、右侧 A4 实时预览；粘贴简历文本即可自动识别并导入；内置五步 JD 优化流水线；支持 PDF、PNG、JPG 高清导出。
